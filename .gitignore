@@ -1,6 +1,7 @@
-#directories
+# Directories
 /.vs
 /build
+/x64
 
 # Prerequisites
 *.d
