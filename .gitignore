@@ -1,7 +1,8 @@
 # Directories
 /.vs
 /build
-/x64
+/x64/Debug
+/x64/Release
 
 # Prerequisites
 *.d
