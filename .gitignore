@@ -3,6 +3,7 @@
 /build
 /x64/Debug
 /x64/Release
+/Biscuit/x64
 
 # Prerequisites
 *.d
