@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <thread>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -67,6 +68,25 @@ glm::vec3 cubePositions[] = {
     glm::vec3(-1.3f,  1.0f, -1.5f)
 };
 
+static void limitFPS(int fps)
+{
+    static auto lastTime = std::chrono::high_resolution_clock::now();
+    static float accumulatedTime = 0.0f;
+    float frameTime = 1.0f / fps;
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<float> elapsed = currentTime - lastTime;
+    lastTime = currentTime;
+
+    accumulatedTime += elapsed.count();
+
+    if (accumulatedTime < frameTime)
+    {
+        std::this_thread::sleep_for(std::chrono::duration<float>(frameTime - accumulatedTime));
+    }
+
+    accumulatedTime -= frameTime;
+}
 
 int main()
 {
@@ -91,6 +111,8 @@ int main()
 
     glfwMakeContextCurrent(window);
 
+    glfwSwapInterval(1);
+
     if (glewInit() != GLEW_OK)
     {
         std::cout << "Failed to initialize GLEW" << std::endl;
@@ -101,10 +123,9 @@ int main()
 
     Shader shader("vertexShader.glsl", "fragmentShader.glsl");
 
-    unsigned int VBO, VAO, EBO;
+    unsigned int VBO, VAO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
-    glGenBuffers(1, &EBO);
 
     glBindVertexArray(VAO);
 
@@ -166,11 +187,23 @@ int main()
 
     glBindVertexArray(0);
 
+    float deltaTime = 0.0f;
+    float lastFrame = 0.0f;
+
+    float cubeRotations[10] = { 0.0f };
+
     while (!glfwWindowShouldClose(window))
     {
+        // Calculate deltaTime
+        float currentFrame = glfwGetTime();
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
+
+        // Clear the screen
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        // Bind textures
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture1);
         glActiveTexture(GL_TEXTURE1);
@@ -178,48 +211,53 @@ int main()
 
         shader.use();
 
-        glm::mat4 model = glm::mat4(1.0f);
+        // View and projection matrices
         glm::mat4 view = glm::mat4(1.0f);
         glm::mat4 projection = glm::mat4(1.0f);
-
         view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
         projection = glm::perspective(glm::radians(45.0f), (float)800 / (float)600, 0.1f, 100.0f);
 
-        unsigned int modelLoc = glGetUniformLocation(shader.ID, "model");
-        unsigned int viewLoc = glGetUniformLocation(shader.ID, "view");
-
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
-
+        shader.setMat4("view", view);
         shader.setMat4("projection", projection);
 
         glBindVertexArray(VAO);
 
+        // Rotation speed
+        float rotationSpeed = 50.0f;
+
+        // Render cubes
         for (unsigned int i = 0; i < 10; i++)
         {
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, cubePositions[i]);
-            float angle = 20.0f * i;
-            if (i % 3 == 0) 
+
+            // Update the rotation angle for this cube
+            cubeRotations[i] += rotationSpeed * deltaTime;
+
+            // Apply the rotation
+            if (i % 3 != 0)
             {
-                model = glm::rotate(model, (float)glfwGetTime() * glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+                model = glm::rotate(model, glm::radians(cubeRotations[i]), glm::vec3(1.0f, 0.3f, 0.5f));
             }
             else
             {
-                model = glm::rotate(model, (float)glfwGetTime(), glm::vec3(0.5f, 1.0f, 0.0f));
+                model = glm::rotate(model, glm::radians(cubeRotations[i]), glm::vec3(0.5f, 1.0f, 0.0f));
             }
-            shader.setMat4("model", model);
 
+            shader.setMat4("model", model);
             glDrawArrays(GL_TRIANGLES, 0, 36);
         }
 
+        // Swap buffers and poll events
         glfwSwapBuffers(window);
         glfwPollEvents();
+
+        // Limit FPS
+        limitFPS(60);
     }
 
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
-    glDeleteBuffers(1, &EBO);
 
     glfwTerminate();
     return 0;
