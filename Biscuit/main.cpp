@@ -68,25 +68,25 @@ glm::vec3 cubePositions[] = {
     glm::vec3(-1.3f,  1.0f, -1.5f)
 };
 
-static void limitFPS(int fps)
-{
-    static auto lastTime = std::chrono::high_resolution_clock::now();
-    static float accumulatedTime = 0.0f;
-    float frameTime = 1.0f / fps;
+glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<float> elapsed = currentTime - lastTime;
-    lastTime = currentTime;
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
 
-    accumulatedTime += elapsed.count();
+bool firstMouse = true;
+float yaw = -90.0f;
+float pitch = 0.0f;
+float lastX = 800.0f / 2.0;
+float lastY = 600.0 / 2.0;
+float fov = 45.0f;
 
-    if (accumulatedTime < frameTime)
-    {
-        std::this_thread::sleep_for(std::chrono::duration<float>(frameTime - accumulatedTime));
-    }
-
-    accumulatedTime -= frameTime;
-}
+void processInput(GLFWwindow* window);
+static void limitFPS(int fps);
+void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 
 int main()
 {
@@ -110,6 +110,11 @@ int main()
     }
 
     glfwMakeContextCurrent(window);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetScrollCallback(window, scroll_callback);
+
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     glfwSwapInterval(1);
 
@@ -187,23 +192,22 @@ int main()
 
     glBindVertexArray(0);
 
-    float deltaTime = 0.0f;
-    float lastFrame = 0.0f;
-
     float cubeRotations[10] = { 0.0f };
+    float zChange = -3.0f;
+	float xChange = 0.0f;
+	float yChange = 0.0f;
 
     while (!glfwWindowShouldClose(window))
     {
-        // Calculate deltaTime
         float currentFrame = glfwGetTime();
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
-        // Clear the screen
+        processInput(window);
+
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Bind textures
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture1);
         glActiveTexture(GL_TEXTURE1);
@@ -211,30 +215,23 @@ int main()
 
         shader.use();
 
-        // View and projection matrices
-        glm::mat4 view = glm::mat4(1.0f);
-        glm::mat4 projection = glm::mat4(1.0f);
-        view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
-        projection = glm::perspective(glm::radians(45.0f), (float)800 / (float)600, 0.1f, 100.0f);
-
-        shader.setMat4("view", view);
+        glm::mat4 projection = glm::perspective(glm::radians(fov), 800.0f / 600.0f, 0.1f, 100.0f);
         shader.setMat4("projection", projection);
+
+        glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+        shader.setMat4("view", view);
 
         glBindVertexArray(VAO);
 
-        // Rotation speed
         float rotationSpeed = 50.0f;
 
-        // Render cubes
         for (unsigned int i = 0; i < 10; i++)
         {
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, cubePositions[i]);
 
-            // Update the rotation angle for this cube
             cubeRotations[i] += rotationSpeed * deltaTime;
 
-            // Apply the rotation
             if (i % 3 != 0)
             {
                 model = glm::rotate(model, glm::radians(cubeRotations[i]), glm::vec3(1.0f, 0.3f, 0.5f));
@@ -248,11 +245,12 @@ int main()
             glDrawArrays(GL_TRIANGLES, 0, 36);
         }
 
-        // Swap buffers and poll events
         glfwSwapBuffers(window);
         glfwPollEvents();
 
-        // Limit FPS
+        glfwSetScrollCallback(window, scroll_callback);
+        glfwSetCursorPosCallback(window, mouse_callback);
+
         limitFPS(60);
     }
 
@@ -261,4 +259,87 @@ int main()
 
     glfwTerminate();
     return 0;
+}
+
+void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+{
+    glViewport(0, 0, width, height);
+}
+
+void processInput(GLFWwindow* window)
+{
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
+
+    float cameraSpeed = 2.5f * deltaTime;
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        cameraPos += cameraSpeed * cameraFront;
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+        cameraPos -= cameraSpeed * cameraFront;
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+}
+
+void mouse_callback(GLFWwindow* window, double xpos, double ypos)
+{
+    if (firstMouse)
+    {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos;
+    lastX = xpos;
+    lastY = ypos;
+
+    float sensitivity = 0.1f;
+    xoffset *= sensitivity;
+    yoffset *= sensitivity;
+
+    yaw += xoffset;
+    pitch += yoffset;
+
+    if (pitch > 89.0f)
+        pitch = 89.0f;
+    if (pitch < -89.0f)
+        pitch = -89.0f;
+
+    glm::vec3 direction{};
+    direction.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    direction.y = sin(glm::radians(pitch));
+    direction.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+    cameraFront = glm::normalize(direction);
+}
+
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+    fov -= (float)yoffset;
+    if (fov < 1.0f)
+        fov = 1.0f;
+    if (fov > 45.0f)
+        fov = 45.0f;
+}
+
+static void limitFPS(int fps)
+{
+    static auto lastTime = std::chrono::high_resolution_clock::now();
+    static float accumulatedTime = 0.0f;
+    float frameTime = 1.0f / fps;
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<float> elapsed = currentTime - lastTime;
+    lastTime = currentTime;
+
+    accumulatedTime += elapsed.count();
+
+    if (accumulatedTime < frameTime)
+    {
+        std::this_thread::sleep_for(std::chrono::duration<float>(frameTime - accumulatedTime));
+    }
+
+    accumulatedTime -= frameTime;
 }
